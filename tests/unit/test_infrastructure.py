@@ -35,8 +35,9 @@ def test_pdf_reader_empty_bytes():
 def test_pdf_reader_with_mocked_success():
     """Test extract_text success path with mocked PdfReader.
 
-    Covers lines 41-46 (try block: text extraction logic) and
+    Covers the try block (text extraction logic) and
     verifies the return value when text is successfully extracted.
+    The function returns a tuple (markdown_text, page_count).
     """
     from app.infrastructure.pdf_reader import extract_text
 
@@ -50,15 +51,14 @@ def test_pdf_reader_with_mocked_success():
 
     with patch("app.infrastructure.pdf_reader.PdfReader", return_value=mock_reader):
         result = extract_text(b"any pdf bytes")
-        assert result == "Extracted page text"
+        assert isinstance(result, tuple)
+        markdown, page_count = result
+        assert "# PDF Extraction" in markdown
+        assert page_count == 1
 
 
 def test_pdf_reader_with_mocked_no_text():
-    """Test extract_text returns None when PDF has no extractable text.
-
-    Covers the else branch on line 46: return "\n".join(text_parts) if text_parts else None
-    when text_parts is empty.
-    """
+    """Test extract_text returns markdown with page count when PDF has no extractable text."""
     from app.infrastructure.pdf_reader import extract_text
 
     # Create a mock page object that returns None/empty text
@@ -71,14 +71,17 @@ def test_pdf_reader_with_mocked_no_text():
 
     with patch("app.infrastructure.pdf_reader.PdfReader", return_value=mock_reader):
         result = extract_text(b"any pdf bytes")
-        assert result is None
+        assert isinstance(result, tuple)
+        markdown, page_count = result
+        assert page_count == 1
+        assert "*No text extracted*" in markdown
 
 
 def test_pdf_reader_with_mocked_empty_pages():
     """Test extract_text with empty pages list.
 
     Covers the case when reader.pages is an empty list,
-    resulting in text_parts being empty and returning None.
+    resulting in text_parts being empty and returning markdown with page_count=0.
     """
     from app.infrastructure.pdf_reader import extract_text
 
@@ -88,7 +91,10 @@ def test_pdf_reader_with_mocked_empty_pages():
 
     with patch("app.infrastructure.pdf_reader.PdfReader", return_value=mock_reader):
         result = extract_text(b"any pdf bytes")
-        assert result is None
+        assert isinstance(result, tuple)
+        markdown, page_count = result
+        assert page_count == 0
+        assert "*No text extracted*" in markdown
 
 
 def test_pdf_reader_unexpected_error():

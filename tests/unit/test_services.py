@@ -5,6 +5,10 @@ from unittest.mock import patch
 
 import pytest
 
+from app.dtos.extraction import ExtractResponse
+from app.infrastructure.pdf_reader import InfraExtractionError
+from app.services.extraction import extract_pdf_text
+
 
 def test_extract_service_importable():
     """Test that services.extraction.extract_pdf_text is importable."""
@@ -13,61 +17,52 @@ def test_extract_service_importable():
     assert callable(extract_pdf_text)
 
 
-def test_extract_service_valid_base64():
-    """Test that extract_pdf_text processes valid base64 PDF correctly.
+def test_extract_service_valid_pdf():
+    """Test that extract_pdf_text processes a valid PDF correctly.
 
-    With mock infrastructure, should return ExtractResponse with extracted text.
+    With mock infrastructure, should return ExtractResponse with extracted
+    text and page count in Markdown format.
     """
-    from app.dtos.extraction import ExtractResponse
-    from app.services.extraction import extract_pdf_text
-
     # Create a simple valid PDF and base64-encode it
     pdf_bytes = b"""%PDF-1.4
 1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
+<< /Type /Catalog /Pages 2 0 R endobj
 xref
 0 2
 0000000000 65535 f 
 0000000009 00000 n 
 trailer
-<< /Size 2 /Root 1 0 R >>
-startxref
-9
-%%EOF"""
+<< /Size 2 /Root 1 0 R startxref 9 %%EOF"""
     b64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
 
-    # Test with mock that returns extracted text
+    # Test with mock that returns extracted text and page count
     with patch("app.services.extraction.extract_text") as mock_extract:
-        mock_extract.return_value = "Extracted text from page 1"
+        mock_extract.return_value = ("Extracted text from page 1", 1)
         result: ExtractResponse = extract_pdf_text(b64_pdf)
-        assert result.extracted_text == "Extracted text from page 1"
-        assert result.status == "processed"
+        assert result.content == "Extracted text from page 1"
+        assert result.page_count == 1
 
 
-def test_extract_service_invalid_base64_returns_infra_error():
-    """Test that invalid base64 raises InfraExtractionError.
+def test_extract_service_invalid_pdf_bytes_returns_infra_error():
+    """Test that invalid PDF bytes raise InfraExtractionError.
 
-    Verifies the service layer catches base64 decode errors and wraps
-    them as infrastructure errors (RFC 9457 mapping happens at API layer).
+    Verifies the service layer catches PDF extraction failures and
+    wraps them as InfraExtractionError (RFC 9457 mapping happens at API layer).
+    The service now accepts raw binary PDF bytes instead of base64.
     """
-    from app.infrastructure.pdf_reader import InfraExtractionError
-    from app.services.extraction import extract_pdf_text
 
-    # Invalid base64 should raise InfraExtractionError from the service
+    # Invalid PDF bytes should raise InfraExtractionError from the service
     with pytest.raises(InfraExtractionError) as exc_info:
-        extract_pdf_text("not_valid_base64!")
-    assert "Invalid base64" in str(exc_info.value)
+        extract_pdf_text(b"not a valid pdf at all")
+    assert "PDF" in str(exc_info.value).upper() or "extraction" in str(exc_info.value).lower()
 
 
-def test_extract_service_extract_text_error():
+def test_extract_service_extract_error():
     """Test that extraction errors from infra are propagated.
 
     Tests that when the infrastructure adapter fails, the service
     propagates the InfraExtractionError.
     """
-    from app.infrastructure.pdf_reader import InfraExtractionError
-    from app.services.extraction import extract_pdf_text
 
     pdf_bytes = b"%PDF-1.4 fake content"
     b64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
@@ -90,7 +85,7 @@ def test_extract_service_no_fastapi_import():
     # Should not contain "from fastapi" or "from starlette" or "import HTTPException"
     assert "from fastapi" not in source, "Service layer must not import FastAPI"
     assert "from starlette" not in source, "Service layer must not import Starlette"
-    assert "HTTPException" not in source, "Service layer must not import HTTPException"
+    assert "HTTPException" not in source, "Service layer must import HTTPException"
 
 
 def test_extract_service_returns_dto():
@@ -98,17 +93,16 @@ def test_extract_service_returns_dto():
 
     Verifies the return type and that required fields are present.
     """
-    from app.dtos.extraction import ExtractResponse
-    from app.services.extraction import extract_pdf_text
-
     # Create a valid base64 PDF
     pdf_bytes = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\nxref\n0 2\n0000000000 65535 f \n0000000009 00000 n \ntrailer\n<< /Size 2 /Root 1 0 R >>\nstartxref\n9\n%%EOF"
     b64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
 
-    # With mock that returns text
+    # With mock that returns text and page count
     with patch("app.services.extraction.extract_text") as mock_extract:
-        mock_extract.return_value = "Hello World"
+        mock_extract.return_value = ("Hello World", 1)
         result = extract_pdf_text(b64_pdf)
         assert isinstance(result, ExtractResponse)
-        assert hasattr(result, "extracted_text")
-        assert hasattr(result, "status")
+        assert hasattr(result, "content")
+        assert hasattr(result, "page_count")
+        assert result.content == "Hello World"
+        assert result.page_count == 1

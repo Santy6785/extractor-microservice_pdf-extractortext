@@ -6,25 +6,23 @@ from pydantic import BaseModel
 class ExtractRequest(BaseModel):
     """Request DTO for PDF text extraction.
 
-    Contains the base64-encoded PDF payload to be processed.
+    Contains the binary PDF file payload to be processed via multipart/form-data.
     """
 
-    base64_pdf: str
+    file: bytes
 
-    model_config = {"json_schema_extra": {"example": {"base64_pdf": "JVBERi0xLjQK"}}}
+    model_config = {"json_schema_extra": {"example": {"file": b""}}}
 
 
 class ExtractResponse(BaseModel):
     """Response DTO for PDF text extraction.
 
-    Contains the extracted text and processing status.
+    Contains the extracted text in Markdown format and the page count.
     """
 
-    extracted_text: str
-    status: str = "processed"
+    content: str
+    page_count: int
 
     model_config = {
-        "json_schema_extra": {
-            "example": {"extracted_text": "Hello World", "status": "processed"}
-        }
+        "json_schema_extra": {"example": {"content": "# Hello World", "page_count": 1}}
     }
