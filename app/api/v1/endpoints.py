@@ -47,7 +47,7 @@ async def extract_endpoint(file: UploadFile = Form(...)) -> ExtractResponse:
 
     try:
         try:
-            pdf_bytes = asyncio.wait_for(file.read(), timeout=30.0)
+            pdf_bytes = await asyncio.wait_for(file.read(), timeout=30.0)
         except asyncio.TimeoutError:
             error_detail = rfc9457_error(400, "Extraction Failed", "PDF read timed out")
             raise HTTPException(status_code=400, detail=error_detail)
