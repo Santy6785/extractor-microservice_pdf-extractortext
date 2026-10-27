@@ -1,0 +1,6 @@
+# Exclude virtual environment and caches
+.venv
+__pycache__
+.git
+tests/stress/*.bin
+scratch
