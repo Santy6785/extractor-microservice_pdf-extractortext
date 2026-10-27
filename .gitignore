@@ -9,3 +9,6 @@ __pycache__/
 
 tests/stress/*.bin
 scratch/
+
+tests/stress/*.bin
+scratch/
