@@ -4,6 +4,7 @@ Uses pydantic-settings to load from environment variables following Twelve‑Fac
 """
 
 from pydantic_settings import BaseSettings
+from pydantic import Field
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables.
@@ -16,9 +17,13 @@ class Settings(BaseSettings):
     PORT: int = 80
     LOG_LEVEL: str = "INFO"
 
-    # Concurrency control
+    # Concurrency control (legacy fields, kept for backward compatibility)
     CONCURRENCY_LIMIT: int = 5
     ACQUIRE_TIMEOUT: float = 0.01
+
+    # New extraction concurrency settings (used by the /extract endpoint)
+    extract_concurrency: int = Field(2, env="EXTRACT_CONCURRENCY")
+    extract_queue_timeout: float = Field(20.0, env="EXTRACT_QUEUE_TIMEOUT")
 
     # PDF limits
     PDF_MAX_FILE_SIZE_MB: int = 50

@@ -9,7 +9,7 @@ from app.core.errors import rfc9457_error
 
 app = FastAPI(
     title="PDF Text Extraction Service",
-    description="Microservice that extracts text from PDF documents using base64 encoding and pypdf",
+    description="Microservice that extracts text from PDF documents via raw PDF bytes or multipart upload",
     version="1.0.0",
 )
 
@@ -30,10 +30,12 @@ async def rfc9457_http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,
         content=error_detail,
+        headers=getattr(exc, "headers", None),
     )
 
 
-app.include_router(v1_router, tags=["pdf-extraction"])
+app.include_router(v1_router)
+app.include_router(v1_router, prefix="/api/v1", include_in_schema=False)
 
 
 @app.get("/health", include_in_schema=False)

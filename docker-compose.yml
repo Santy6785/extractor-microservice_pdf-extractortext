@@ -4,7 +4,8 @@ services:
     image: pdf-extraction-service
     restart: unless-stopped
     environment:
-      - PDF_MAX_PAGES=50
+      - EXTRACT_CONCURRENCY=${EXTRACT_CONCURRENCY:-5}
+      - EXTRACT_QUEUE_TIMEOUT=${EXTRACT_QUEUE_TIMEOUT:-0.01}
       - PDF_MAX_FILE_SIZE_MB=50
     deploy:
       replicas: 5

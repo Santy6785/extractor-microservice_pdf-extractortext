@@ -1,65 +1,68 @@
 """API endpoints for PDF text extraction microservice.
 
-Follows strict N-layers architecture:
-- Presentation layer (this file) → Services layer → Infrastructure layer
-- API layer never imports from infrastructure directly
-- All errors follow RFC 9457 (Problem Details for HTTP APIs)
-- Backpressure with asyncio.Semaphore to prevent overload/timeout.
+This version follows the updated specification:
+- No router prefix; the router is mounted at the root and also aliased under /api/v1.
+- Concurrency control uses settings.extract_concurrency and settings.extract_queue_timeout.
+- Handles three content types: multipart/form-data with a `file` field, `application/pdf`, and `application/octet-stream`.
+- Returns RFC 9457 compliant errors.
 """
 
 import asyncio
-
-from fastapi import APIRouter, Form, UploadFile
-from fastapi.exceptions import HTTPException
-
+from fastapi import APIRouter, Request, HTTPException
 from app.core.errors import rfc9457_error
+from app.core.config import Settings
 from app.dtos.extraction import ExtractResponse
 from app.services.extraction import extract_pdf_text
-from app.infrastructure.pdf_reader import InfraExtractionError
 
-router = APIRouter(prefix="/api/v1", tags=["pdf-extraction"])
+settings = Settings()
 
-# Backpressure: semáforo con límite de 5 concurrencia para devolver 429/503
-_CONCURRENCY_LIMIT = 5
-_semaphore = asyncio.Semaphore(_CONCURRENCY_LIMIT)
+router = APIRouter(tags=["pdf-extraction"])  # No prefix
 
+_semaphore = asyncio.Semaphore(settings.extract_concurrency)
+
+async def _read_pdf(request: Request) -> bytes:
+    ct = request.headers.get("content-type", "").lower()
+    if ct.startswith("multipart/form-data"):
+        form = await request.form()
+        upload = form.get("file")
+        if upload is None or not hasattr(upload, "read"):
+            raise HTTPException(
+                status_code=400,
+                detail=rfc9457_error(400, "Bad Request", "Missing multipart field 'file'")
+            )
+        return await upload.read()
+    if ct.startswith(("application/pdf", "application/octet-stream")):
+        return await request.body()
+    raise HTTPException(
+        status_code=415,
+        detail=rfc9457_error(
+            415,
+            "Unsupported Media Type",
+            "Use multipart/form-data, application/pdf or application/octet-stream",
+        ),
+    )
 
 @router.post("/extract", response_model=ExtractResponse)
-async def extract_endpoint(file: UploadFile = Form(...)) -> ExtractResponse:
-    """Extract text from a PDF document received as binary via multipart/form-data.
-
-    FastAPI requiere Form(...) en el parámetro para parsear datos multipart.
-    Accepta un PDF subido como multipart/form-data con el campo "file".
-    Devuelve el texto extraído en formato Markdown y el conteo de páginas.
-
-    Devuelve 429 Too Many Requests si se alcanza el límite de concurrencia (backpressure).
-    Devuelve 400 Problem Details (RFC 9457) para entradas inválidas o fallos de extracción.
-    """
-    # Intentar adquirir un slot con timeout corto (aprox. 10ms)
-    # Si no se libera en ese tiempo, la cola está saturada
+async def extract_endpoint(request: Request) -> ExtractResponse:
     try:
-        await asyncio.wait_for(_semaphore.acquire(), timeout=0.01)
+        await asyncio.wait_for(_semaphore.acquire(), timeout=settings.extract_queue_timeout)
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=429, detail="Too Many Requests")
-
-    # Ensure release after processing (even if error)
-    acquired = True
-
+        raise HTTPException(
+            status_code=429,
+            detail=rfc9457_error(429, "Too Many Requests", "Queue timeout"),
+            headers={"Retry-After": "1"},
+        )
     try:
-        try:
-            pdf_bytes = await asyncio.wait_for(file.read(), timeout=30.0)
-        except asyncio.TimeoutError:
-            error_detail = rfc9457_error(400, "Extraction Failed", "PDF read timed out")
-            raise HTTPException(status_code=400, detail=error_detail)
-
-        result = extract_pdf_text(pdf_bytes)
-        return result
+        pdf_bytes = await _read_pdf(request)
+        if not pdf_bytes.startswith(b"%PDF-"):
+            raise HTTPException(
+                status_code=400,
+                detail=rfc9457_error(400, "Bad Request", "Not a PDF (missing %PDF- header)"),
+            )
+        return await asyncio.to_thread(extract_pdf_text, pdf_bytes)
     except HTTPException:
-        # Re-lanzar HTTPException manteniendo código y detalle
         raise
     except Exception as exc:
-        error_detail = rfc9457_error(400, "Extraction Failed", str(exc))
-        raise HTTPException(status_code=400, detail=error_detail)
+        raise HTTPException(status_code=400, detail=rfc9457_error(400, "Extraction Failed", str(exc)))
     finally:
-        if acquired:
-            _semaphore.release()
+        _semaphore.release()

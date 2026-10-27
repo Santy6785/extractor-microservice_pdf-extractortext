@@ -1,6 +1,5 @@
 """RFC 9457 Problem Details for HTTP API errors."""
 
-
 def rfc9457_error(
     status_code: int,
     title: str,
@@ -23,4 +22,5 @@ def rfc9457_error(
         "title": title,
         "status": status_code,
         "detail": detail,
+        "instance": instance,
     }
