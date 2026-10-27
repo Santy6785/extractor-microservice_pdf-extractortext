@@ -7,7 +7,7 @@ Does NOT import any FastAPI or HTTP types — pure infrastructure logic.
 from __future__ import annotations
 
 import io
-
+import re
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
@@ -48,38 +48,66 @@ def extract_text(pdf_bytes: bytes) -> tuple[str, int]:
         raw_text = "\n".join(text_parts) if text_parts else ""
 
         markdown = _to_markdown(raw_text, page_count)
-
         return markdown, page_count
     except PdfReadError as exc:
         raise InfraExtractionError(f"Failed to read PDF: {exc}") from exc
     except Exception as exc:
-        raise InfraExtractionError(
-            f"Unexpected error extracting PDF text: {exc}"
-        ) from exc
+        raise InfraExtractionError(f"Unexpected error extracting PDF text: {exc}") from exc
 
 
 def _to_markdown(text: str, page_count: int) -> str:
-    """Convert plain text to Markdown format.
+    """Convert extracted plain text to a simple Markdown representation.
 
-    Adds a header with page count and ensures proper formatting.
+    The heuristic detects simple titles, bullet/numbered lists, and very basic tables.
+    It does **not** aim to be perfect; complex structures are left as plain text.
     """
     if not text:
         return f"# PDF Extraction\n**Pages:** {page_count}\n\n*No text extracted*"
 
-    # Create a level-1 header with page count, then the content
-    markdown = f"# PDF Extraction\n**Pages:** {page_count}\n\n"
-    # Preserve paragraphs by splitting on double newlines
-    paragraphs = text.split("\n\n")
-    for i, para in enumerate(paragraphs):
-        para_stripped = para.strip()
-        if para_stripped:
-            # Add blockquote for multi-line paragraphs if needed
-            lines = [l for l in para_stripped.split("\n") if l.strip()]
-            if len(lines) > 1:
-                markdown += f"> {lines[0]}\n"
-                for line in lines[1:]:
-                    markdown += f"> {line}\n"
-            else:
-                markdown += f"{lines[0]}\n"
+    lines = text.split("\n")
+    result_lines: list[str] = []
+    i = 0
 
-    return markdown.rstrip("\n")
+    def is_title(line: str) -> bool:
+        stripped = line.strip()
+        return len(stripped) > 3 and stripped.isupper()
+
+    def is_table_separator(line: str) -> bool:
+        return bool(re.fullmatch(r"[\s-]+", line))
+
+    while i < len(lines):
+        line = lines[i].rstrip()
+        if not line:
+            result_lines.append("")
+            i += 1
+            continue
+        if is_title(line):
+            result_lines.append(f"# {line.strip()}")
+            i += 1
+            continue
+        if re.match(r"^(\s*[-*+]\s+|\s*\d+\.\s+)", line):
+            result_lines.append(line.strip())
+            i += 1
+            continue
+        # Table detection
+        if i + 1 < len(lines) and re.search(r"\s{2,}", line) and is_table_separator(lines[i + 1]):
+            header_cells = [c.strip() for c in re.split(r"\s{2,}", line) if c.strip()]
+            separator = "|".join(["---"] * len(header_cells))
+            result_lines.append("| " + " | ".join(header_cells) + " |")
+            result_lines.append("| " + separator + " |")
+            i += 2
+            while i < len(lines) and re.search(r"\s{2,}", lines[i]):
+                row_cells = [c.strip() for c in re.split(r"\s{2,}", lines[i]) if c.strip()]
+                if len(row_cells) == len(header_cells):
+                    result_lines.append("| " + " | ".join(row_cells) + " |")
+                else:
+                    break
+                i += 1
+            continue
+        # Default paragraph line
+        result_lines.append(line)
+        i += 1
+
+    header = f"# PDF Extraction\n**Pages:** {page_count}\n"
+    markdown = header + "\n".join(result_lines).rstrip("\n")
+    return markdown

@@ -19,16 +19,12 @@ async def rfc9457_http_exception_handler(request: Request, exc: HTTPException):
     """Convert HTTPException to RFC 9457 Problem Details format.
 
     Ensures error fields (type, title, status, detail) appear at the top level
-    of the response body, not nested under a "detail" key.
+    of the response body, not nested under a \"detail\" key.
     """
     error_detail = rfc9457_error(
         status_code=exc.status_code,
-        title=exc.detail
-        if isinstance(exc.detail, str)
-        else exc.detail.get("title", "Error"),
-        detail=exc.detail
-        if isinstance(exc.detail, str)
-        else exc.detail.get("detail", str(exc.detail)),
+        title=exc.detail if isinstance(exc.detail, str) else exc.detail.get("title", "Error"),
+        detail=exc.detail if isinstance(exc.detail, str) else exc.detail.get("detail", str(exc.detail)),
         instance=str(request.url.path),
     )
     return JSONResponse(

@@ -1,10 +1,7 @@
-version: "3.9"
-
 services:
   api:
     build: .
     image: pdf-extraction-service
-    # Eliminamos 'container_name' para que Docker pueda crear las 5 réplicas sin choque de nombres
     restart: unless-stopped
     environment:
       - PDF_MAX_PAGES=50
@@ -16,25 +13,26 @@ services:
           cpus: '1.0'
           memory: '1G'
     expose:
-      - "80" # Exponemos el puerto internamente para que Nginx lo vea, pero no choca en tu PC
-
-  nginx:
-    image: nginx:alpine
-    container_name: pdf-extraction-nginx
-    restart: unless-stopped
-    ports:
-      - "8080:80" # Ahora tu API estará disponible en el puerto 8080 de tu máquina
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro # Corregido: sin espacio antes de "ro"
-    depends_on:
-      - api
+      - "80"
+    networks:
+      - proxy
+    # Traefik labels will be added later as needed
 
   load-generator:
     image: peterevans/vegeta:latest
-    command: ["sh", "-c", "sleep 5 && vegeta attack -rate=50 -duration=30s -timeout=30s http://nginx:80/api/v1/extract -body 'file@/prueba.pdf' | vegeta results > /results.txt"]
+    command: ["sh", "-c", "sleep 5 && vegeta attack -rate=50 -duration=30s -timeout=30s http://api:80/api/v1/extract -body 'file@/pdfs/prueba.pdf' | vegeta results -type=text > /results.txt"]
     environment:
-      - PDF_PATH=/prueba.pdf
+      - PDF_PATH=/pdfs/prueba.pdf
     volumes:
-      - ./tests/stress/vegeta_targets.txt:/vegeta_targets.txt:ro # Corregido
+      - ./tests/stress/vegeta_targets.txt:/vegeta_targets.txt:ro
+      - ./tests/stress/pdfs:/pdfs:ro
+      - ./tests/stress/results:/results
     profiles:
-      - testing # Lo ocultamos para que no se ejecute automáticamente al levantar la API
+      - testing
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: proxy
