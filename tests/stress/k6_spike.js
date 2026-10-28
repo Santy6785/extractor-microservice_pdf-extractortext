@@ -1,7 +1,7 @@
 import http from "k6/http";
 import { check } from "k6";
 
-const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
+const BASE_URL = __ENV.BASE_URL || "https://extractor.universidad.localhost";
 const names = [
   "2020-Scrum-Guide-Spanish-Latin-South-American.pdf",
   "scrum_manager_historias_usuario.pdf",
@@ -17,6 +17,7 @@ export const options = {
     { duration: "20s", target: 100 },
     { duration: "10s", target: 0 },
   ],
+  insecureSkipTLSVerify: true,
 };
 
 export default function () {

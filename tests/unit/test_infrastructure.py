@@ -1,26 +1,20 @@
-"""Unit tests for infrastructure layer - Task 3."""
+"""Unit tests for infrastructure layer using pymupdf - Task 5b."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
+import pymupdf
 
 from app.infrastructure.pdf_reader import InfraExtractionError, extract_text
 
 
 def test_pdf_reader_importable():
     """Test that infra.pdf_reader.extract_text is importable."""
-    from app.infrastructure.pdf_reader import InfraExtractionError, extract_text
-
-    # With invalid content, pypdf raises PdfStreamError which wraps to InfraExtractionError
-    pdf_bytes = b"%PDF-1.4 fake content"
-    with pytest.raises(InfraExtractionError):
-        extract_text(pdf_bytes)
+    assert callable(extract_text)
 
 
 def test_pdf_reader_raises_on_invalid():
     """Test that extract_text raises InfraExtractionError on invalid input."""
-    from app.infrastructure.pdf_reader import InfraExtractionError, extract_text
-
     with pytest.raises(InfraExtractionError):
         extract_text(b"not a pdf at all")
 
@@ -32,85 +26,51 @@ def test_pdf_reader_empty_bytes():
     assert "PDF bytes are empty" in str(excinfo.value)
 
 
-def test_pdf_reader_with_mocked_success():
-    """Test extract_text success path with mocked PdfReader.
+def test_pdf_reader_extracts_text_real_pdf():
+    """Test extract_text success path with a real PDF generated via pymupdf."""
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((50, 72), "Extracted page text")
+    pdf_bytes = doc.tobytes()
+    doc.close()
 
-    Covers the try block (text extraction logic) and
-    verifies the return value when text is successfully extracted.
-    The function returns a tuple (markdown_text, page_count).
-    """
-    from app.infrastructure.pdf_reader import extract_text
-
-    # Create a mock page object that returns text when extract_text is called
-    mock_page = MagicMock()
-    mock_page.extract_text.return_value = "Extracted page text"
-
-    # Create a mock reader with pages that have text
-    mock_reader = MagicMock()
-    mock_reader.pages = [mock_page]
-
-    with patch("app.infrastructure.pdf_reader.PdfReader", return_value=mock_reader):
-        result = extract_text(b"any pdf bytes")
-        assert isinstance(result, tuple)
-        markdown, page_count = result
-        assert "# PDF Extraction" in markdown
-        assert page_count == 1
+    raw_text, page_count = extract_text(pdf_bytes)
+    assert isinstance(raw_text, str)
+    assert "Extracted page text" in raw_text
+    assert page_count == 1
 
 
-def test_pdf_reader_with_mocked_no_text():
-    """Test extract_text returns markdown with page count when PDF has no extractable text."""
-    from app.infrastructure.pdf_reader import extract_text
+def test_pdf_reader_no_text_page():
+    """Test extract_text when PDF pages contain no text."""
+    doc = pymupdf.open()
+    doc.new_page()
+    pdf_bytes = doc.tobytes()
+    doc.close()
 
-    # Create a mock page object that returns None/empty text
-    mock_page = MagicMock()
-    mock_page.extract_text.return_value = None
-
-    # Create a mock reader with pages
-    mock_reader = MagicMock()
-    mock_reader.pages = [mock_page]
-
-    with patch("app.infrastructure.pdf_reader.PdfReader", return_value=mock_reader):
-        result = extract_text(b"any pdf bytes")
-        assert isinstance(result, tuple)
-        markdown, page_count = result
-        assert page_count == 1
-        assert "*No text extracted*" in markdown
+    raw_text, page_count = extract_text(pdf_bytes)
+    assert raw_text == ""
+    assert page_count == 1
 
 
-def test_pdf_reader_with_mocked_empty_pages():
-    """Test extract_text with empty pages list.
+def test_pdf_reader_multiple_pages():
+    """Test extract_text with multiple pages."""
+    doc = pymupdf.open()
+    page1 = doc.new_page()
+    page1.insert_text((50, 72), "Page 1 content")
+    page2 = doc.new_page()
+    page2.insert_text((50, 72), "Page 2 content")
+    pdf_bytes = doc.tobytes()
+    doc.close()
 
-    Covers the case when reader.pages is an empty list,
-    resulting in text_parts being empty and returning markdown with page_count=0.
-    """
-    from app.infrastructure.pdf_reader import extract_text
-
-    # Create a mock reader with no pages
-    mock_reader = MagicMock()
-    mock_reader.pages = []
-
-    with patch("app.infrastructure.pdf_reader.PdfReader", return_value=mock_reader):
-        result = extract_text(b"any pdf bytes")
-        assert isinstance(result, tuple)
-        markdown, page_count = result
-        assert page_count == 0
-        assert "*No text extracted*" in markdown
+    raw_text, page_count = extract_text(pdf_bytes)
+    assert "Page 1 content" in raw_text
+    assert "Page 2 content" in raw_text
+    assert page_count == 2
 
 
 def test_pdf_reader_unexpected_error():
-    """Test extract_text handles unexpected exceptions (general Exception handler).
-
-    This covers lines 49-50 the general Exception catch-all branch.
-    We mock PdfReader to raise a non-PdfReadError exception.
-    """
-    from app.infrastructure.pdf_reader import InfraExtractionError, extract_text
-
-    # Make PdfReader raise a ValueError (not PdfReadError)
-    # This should be caught by the general Exception handler on lines 49-50
-    with patch(
-        "app.infrastructure.pdf_reader.PdfReader",
-        side_effect=ValueError("Unexpected error"),
-    ):
+    """Test extract_text handles unexpected exceptions in pymupdf."""
+    with patch("app.infrastructure.pdf_reader.pymupdf.open", side_effect=RuntimeError("Internal parsing error")):
         with pytest.raises(InfraExtractionError) as excinfo:
-            extract_text(b"any pdf bytes")
-        assert "Unexpected error extracting PDF text" in str(excinfo.value)
+            extract_text(b"%PDF-1.4 dummy")
+        assert "Failed to extract PDF text" in str(excinfo.value)

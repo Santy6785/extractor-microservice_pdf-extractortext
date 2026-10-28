@@ -1,16 +1,15 @@
 """PDF text extraction business logic service.
 
-Orchestrates: binary PDF bytes → pypdf infrastructure adapter → Markdown response DTO.
+Orchestrates: binary PDF bytes -> pymupdf infrastructure adapter -> Markdown response DTO.
 
 Follows strict N-layers architecture: Presentation -> Services -> Infrastructure.
 The service layer does NOT import from infrastructure directly beyond the
-abstract interface contract — it uses the infrastructure adapter as a dependency.
+abstract interface contract - it uses the infrastructure adapter as a dependency.
 """
-
-
 
 from app.dtos.extraction import ExtractResponse
 from app.infrastructure.pdf_reader import InfraExtractionError, extract_text
+from app.services.markdown import to_markdown
 
 
 def extract_pdf_text(pdf_bytes: bytes) -> ExtractResponse:
@@ -33,7 +32,5 @@ def extract_pdf_text(pdf_bytes: bytes) -> ExtractResponse:
     except Exception as exc:
         raise InfraExtractionError(f"PDF text extraction failed: {exc}") from exc
 
-    if extracted_text is None:
-        extracted_text = ""
-
-    return ExtractResponse(content=extracted_text, page_count=page_count)
+    content = to_markdown(extracted_text or "")
+    return ExtractResponse(content=content, page_count=page_count)

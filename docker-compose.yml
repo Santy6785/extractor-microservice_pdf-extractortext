@@ -17,21 +17,19 @@ services:
       - "80"
     networks:
       - proxy
-    # Traefik labels will be added later as needed
-
-  load-generator:
-    image: peterevans/vegeta:latest
-    command: ["sh", "-c", "sleep 5 && vegeta attack -rate=50 -duration=30s -timeout=30s http://api:80/api/v1/extract -body 'file@/pdfs/prueba.pdf' | vegeta results -type=text > /results.txt"]
-    environment:
-      - PDF_PATH=/pdfs/prueba.pdf
-    volumes:
-      - ./tests/stress/vegeta_targets.txt:/vegeta_targets.txt:ro
-      - ./tests/stress/pdfs:/pdfs:ro
-      - ./tests/stress/results:/results
-    profiles:
-      - testing
-    networks:
-      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.extractor.rule=Host(`extractor.universidad.localhost`) && PathPrefix(`/extract`)
+      - traefik.http.routers.extractor.entrypoints=https
+      - traefik.http.routers.extractor.tls=true
+      - traefik.http.services.extractor.loadbalancer.server.port=80
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0) if urllib.request.urlopen('http://127.0.0.1:80/health').getcode()==200 else 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
 networks:
   proxy:
