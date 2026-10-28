@@ -1,0 +1,19 @@
+﻿BENCHMARK DE LIBRERIAS (mediana de 3 corridas, bytes en memoria, mismo PC)
+
+lib        pdf                                                mediana_s  pags    chars
+pypdf      2020-Scrum-Guide-Spanish-Latin-South-American.pdf      2.120    16    35534
+pypdf      scrum_manager_historias_usuario.pdf                    4.513    62    90910
+pypdf      Essential-Kanban-Condensed-Spanish.pdf                 4.866    90   126024
+pypdf      Filosofia_Lean.pdf                                     1.308    42    58456
+pypdfium2  2020-Scrum-Guide-Spanish-Latin-South-American.pdf      0.075    16    35293
+pypdfium2  scrum_manager_historias_usuario.pdf                    0.176    62    90818
+pypdfium2  Essential-Kanban-Condensed-Spanish.pdf                 0.189    90   127954
+pypdfium2  Filosofia_Lean.pdf                                     0.120    42    59301
+pymupdf    2020-Scrum-Guide-Spanish-Latin-South-American.pdf      0.111    16    35553
+pymupdf    scrum_manager_historias_usuario.pdf                    0.185    62    89263
+pymupdf    Essential-Kanban-Condensed-Spanish.pdf                 0.197    90   124569
+pymupdf    Filosofia_Lean.pdf                                     0.165    42    58561
+
+Observacion de calidad (Filosofia_Lean.pdf): pypdf y pymupdf conservan el orden del texto;
+pypdfium2 devolvio fragmentos desordenados en la muestra.
+Decision: pymupdf (10-40x mas rapida que pypdf, orden de texto correcto). Licencia AGPL.
