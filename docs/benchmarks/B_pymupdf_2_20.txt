@@ -1,0 +1,6 @@
+﻿B: pymupdf 1.28.2 + semaforo 2 / 20s (5 replicas, 1 CPU / 1G) via Traefik HTTPS
+k6: checks 49.64% (138/278), http_reqs 139 (2.62/s), 200 OK: 69, fallidas 70 (50.35%)
+    http_req_duration avg=17.04s med=20.11s max=40s p(90)=26.85s p(95)=32.81s
+Vegeta: Requests 1500, throughput 0.93, Success 3.33%
+    Latencies [min, mean, 50, 90, 95, 99, max] 338ms 20.5s 20.2s 21.3s 22.1s 29.0s 30.06s
+    Status Codes 0:13  200:50  429:1437
