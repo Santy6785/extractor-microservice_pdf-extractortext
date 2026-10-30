@@ -1,0 +1,15 @@
+﻿D: mediciones dentro de la red Docker (cliente en contenedor, HTTP directo a http://api:80), pymupdf 1.28.2, 5 replicas, 1 CPU / 1G
+
+Vegeta (50 req/s, 30 s, timeout 30 s):
+  5 / 0.01s : exito 14.20% y 12.87% (200: 213 y 193), mediana 7.6 s y 2.0 s, throughput 4.90 y 5.74 req/s
+  1 / 10s   : exito 8.47%  (200: 127, 429: 1373), mediana 10.07 s, throughput 2.74 req/s
+  2 / 10s   : exito 8.60%  (200: 129, 429: 1371), mediana 11.33 s, throughput 2.67 req/s
+  3 / 10s   : exito 14.20% (200: 213, 429: 1287), mediana 10.11 s, throughput 4.97 req/s
+
+k6 (100 VUs): solo la corrida 2 / 10s termino:
+  checks 43.00% (86/200), http_reqs 100 (1.60/s), 200 OK: 43, fallidas 57
+  http_req_duration med=24.39s p(90)=30.22s; exitosas med=27.59s
+  Las corridas 1/10 y 3/10 se interrumpieron antes del resumen final (no usar).
+
+Conclusion: el semaforo no cambia el resultado de forma significativa (8-14% de exito). El techo observado
+es ~5 req/s en total (~1 req/s por replica) contra 16-25 req/s del profesor.
