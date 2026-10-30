@@ -1,0 +1,15 @@
+POST http://api:80/extract
+Content-Type: application/pdf
+@/pdfs/2020-Scrum-Guide-Spanish-Latin-South-American.pdf
+
+POST http://api:80/extract
+Content-Type: application/pdf
+@/pdfs/scrum_manager_historias_usuario.pdf
+
+POST http://api:80/extract
+Content-Type: application/pdf
+@/pdfs/Essential-Kanban-Condensed-Spanish.pdf
+
+POST http://api:80/extract
+Content-Type: application/pdf
+@/pdfs/Filosofia_Lean.pdf

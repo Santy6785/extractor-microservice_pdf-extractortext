@@ -3,6 +3,7 @@
 This version follows the updated specification:
 - No router prefix; the router is mounted at the root and also aliased under /api/v1.
 - Concurrency control uses settings.extract_concurrency and settings.extract_queue_timeout.
+- Bounded waiting queue uses settings.extract_max_queue.
 - Handles three content types: multipart/form-data with a `file` field, `application/pdf`, and `application/octet-stream`.
 - Returns RFC 9457 compliant errors.
 """
@@ -19,6 +20,7 @@ settings = Settings()
 router = APIRouter(tags=["pdf-extraction"])  # No prefix
 
 _semaphore = asyncio.Semaphore(settings.extract_concurrency)
+_esperando: int = 0
 
 async def _read_pdf(request: Request) -> bytes:
     ct = request.headers.get("content-type", "").lower()
@@ -44,14 +46,28 @@ async def _read_pdf(request: Request) -> bytes:
 
 @router.post("/extract", response_model=ExtractResponse)
 async def extract_endpoint(request: Request) -> ExtractResponse:
-    try:
-        await asyncio.wait_for(_semaphore.acquire(), timeout=settings.extract_queue_timeout)
-    except asyncio.TimeoutError:
-        raise HTTPException(
-            status_code=429,
-            detail=rfc9457_error(429, "Too Many Requests", "Queue timeout"),
-            headers={"Retry-After": "1"},
-        )
+    global _esperando
+    if not _semaphore.locked():
+        await _semaphore.acquire()
+    else:
+        if settings.extract_max_queue > 0 and _esperando >= settings.extract_max_queue:
+            raise HTTPException(
+                status_code=429,
+                detail=rfc9457_error(429, "Too Many Requests", "Queue is full"),
+                headers={"Retry-After": "1"},
+            )
+        _esperando += 1
+        try:
+            await asyncio.wait_for(_semaphore.acquire(), timeout=settings.extract_queue_timeout)
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=429,
+                detail=rfc9457_error(429, "Too Many Requests", "Queue timeout"),
+                headers={"Retry-After": "1"},
+            )
+        finally:
+            _esperando -= 1
+
     try:
         pdf_bytes = await _read_pdf(request)
         if not pdf_bytes.startswith(b"%PDF-"):

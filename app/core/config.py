@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     # New extraction concurrency settings (used by the /extract endpoint)
     extract_concurrency: int = Field(2, env="EXTRACT_CONCURRENCY")
     extract_queue_timeout: float = Field(20.0, env="EXTRACT_QUEUE_TIMEOUT")
+    extract_max_queue: int = 8
+    extract_cache_size: int = 32
 
     # PDF limits
     PDF_MAX_FILE_SIZE_MB: int = 50
