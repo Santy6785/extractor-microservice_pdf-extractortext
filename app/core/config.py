@@ -3,7 +3,7 @@
 Uses pydantic-settings to load from environment variables following Twelve‑Factor principles.
 """
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables.
@@ -25,6 +25,4 @@ class Settings(BaseSettings):
     # PDF limits
     PDF_MAX_FILE_SIZE_MB: int = 50
 
-    class Config:
-        env_prefix = ""
-        case_sensitive = False
+    model_config = SettingsConfigDict(env_prefix="", case_sensitive=False)
