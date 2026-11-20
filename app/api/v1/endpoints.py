@@ -48,6 +48,14 @@ async def _read_pdf(request: Request) -> bytes:
 @router.post("/extract", response_model=ExtractResponse)
 async def extract_endpoint(request: Request) -> ExtractResponse:
     global _esperando
+    max_bytes = settings.PDF_MAX_FILE_SIZE_MB * 1024 * 1024
+    # Early rejection: refuse by declared Content-Length before queueing or reading the body.
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=rfc9457_error(413, "Payload Too Large", f"PDF exceeds {settings.PDF_MAX_FILE_SIZE_MB} MB"),
+        )
     if not _semaphore.locked():
         await _semaphore.acquire()
     else:
@@ -71,6 +79,12 @@ async def extract_endpoint(request: Request) -> ExtractResponse:
 
     try:
         pdf_bytes = await _read_pdf(request)
+        # Chunked uploads have no Content-Length: enforce the limit on the actual body too.
+        if len(pdf_bytes) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=rfc9457_error(413, "Payload Too Large", f"PDF exceeds {settings.PDF_MAX_FILE_SIZE_MB} MB"),
+            )
         if not pdf_bytes.startswith(b"%PDF-"):
             raise HTTPException(
                 status_code=400,
