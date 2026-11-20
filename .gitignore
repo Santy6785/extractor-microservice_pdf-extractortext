@@ -12,3 +12,4 @@ scratch/
 
 tests/stress/*.bin
 scratch/
+.coverage
