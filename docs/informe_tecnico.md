@@ -78,20 +78,40 @@ Solo se consideran corridas con resumen completo (`TOTAL RESULTS` en el log o `-
 | pymupdf, semáforo 2 / 20 s (Windows) | `B_pymupdf_2_20_k6.txt` | 169 | 3,24 req/s | 49,70% | 18,79 s |
 | Docker HTTP, semáforo 2 / 10 s | `D_2_10_k6.txt` | 100 | 1,60 req/s | 56,99% | 24,39 s |
 | E4 (Cambio A): caché + cola | `E4_cambioA_cache_k6.txt` y `.json` | 101 | 1,65 req/s | 0,00% | 24,43 s |
+| **E2: caché + cola (código final)** | `E2_cache_k6.txt` y `.json` | 182 | 3,07 req/s | 17,03% | 2,28 s |
 
 Referencia del profesor (consigna): 1037 requests, 25,35 req/s, 0% error, mediana 1,88 s.
 
-**Estado: el k6 no está resuelto.** Ninguna corrida completa del repo se acerca a la referencia del profesor en throughput ni en latencia. La corrida E4 llegó a 0% de fallos, pero a costa de una mediana de 24 s. El resto de las corridas de k6 (`D_1_10`, `D_3_10`, `D_docker_http_5_001`, `E3`, `E4` en texto) se cortaron antes de `TOTAL RESULTS` y no se usan.
+**Estado: el k6 está medido, pero no resuelto.** El código final tiene una corrida completa (E2): 182 requests, 82,96% de checks correctos y 17,03% de requests fallidas. Ninguna corrida del repo se acerca a la referencia del profesor en throughput (3,07 req/s contra 25,35) ni en cola (p90 18,09 s y p95 19,93 s contra 7,83 s y 8,80 s). La mediana sí queda cerca (2,28 s contra 1,88 s). La corrida E4 llegó a 0% de fallos, pero a costa de una mediana de 24 s. El resto de las corridas de k6 (`D_1_10`, `D_3_10`, `D_docker_http_5_001`, `E3`, `E4` en texto) se cortaron antes de `TOTAL RESULTS` y no se usan.
 
-**Sobre la corrida de 101 requests con 0% de error:** es la que se describió como "E2 k6". Lo que muestra el archivo es que se midió con el Cambio A (ADR-004), no con el código final. No hay un k6 completo del código final en `docs/benchmarks/`.
+**Sobre la corrida de 101 requests con 0% de error:** es la que se describió como "E2 k6". Lo que muestra el archivo es que se midió con el Cambio A (ADR-004). No es la medición del código final, que es E2.
+
+**Sobre los 31 fallos de E2:** el archivo no desglosa el código de cada respuesta fallida. No podemos atribuirlos a 429 ni a otra causa. La duración máxima es de 33,5 s y el timeout por defecto de k6 es de 60 s, así que no parecen timeouts del cliente. Para la próxima corrida hay que registrar el status de cada respuesta.
 
 **Sobre `E3_cache_cola40_k6.txt`:** no es una medición. Contiene un error de Docker Desktop (HTTP 500 en la API de Docker) y no se usa.
 
 ## 6. Análisis
 
-### 6.1 Cuello de botella: ingestión, no solo CPU
+### 6.1 Cuello de botella: transferencia y admisión, con evidencia parcial
 
-Según la nota de medición de la sesión, un PDF cuesta alrededor de 0,3 s de CPU en una réplica caliente. Ese costo no está en `docs/benchmarks/` y no lo verificamos acá. Si se sostiene, la extracción pura con 5 réplicas daría del orden de 16 PDF/s. Los resultados de k6 están por debajo de esa cifra: 1,6 a 3,2 req/s. La diferencia está en subir 3,4 MB por request con 100 VUs en paralelo (k6 registró entre 4,9 y 7,7 MB/s de envío).
+Según la nota de medición de la sesión, un PDF cuesta alrededor de 0,3 s de CPU en una réplica caliente. Ese costo no está en `docs/benchmarks/` y no lo verificamos acá.
+
+La corrida completa de k6 sobre el código final (`E2_cache_k6.json`, 182 requests) muestra en qué fase se va el tiempo de cada request:
+
+| Fase de k6 | Promedio | Mediana | p90 |
+|---|---|---|---|
+| `http_req_blocked` (espera antes de abrir la conexión) | 1,31 s | 90 ms | 6,20 s |
+| `http_req_sending` (subida del PDF) | 2,73 s | 524 ms | 9,79 s |
+| `http_req_waiting` (espera de la respuesta: cola, lectura del body, caché o extracción) | 1,30 s | 298 ms | 4,92 s |
+| `http_req_receiving` (descarga de la respuesta) | 2,23 s | 46 ms | 9,07 s |
+
+En la corrida se enviaron 579 MB a 9,8 MB/s. En promedio, la subida (2,73 s) pesa más que la espera del servidor (1,30 s). Eso es consistente con que la transferencia del payload multipart limita la corrida con 100 VUs. Los datos no alcanzan para más:
+
+- `waiting` mezcla la cola de admisión, la lectura del body, el hash, el caché y la extracción. Sin separar esas partes no podemos decir que el parsing de PyMuPDF sea despreciable.
+- `receiving` promedia 2,23 s con mediana de 46 ms, es decir, una cola larga de descargas lentas. Puede venir del camino de red o del propio k6, que corre en el host con el heap limitado (`GOMEMLIMIT=700MiB`). No está medido.
+- `blocked` tiene p90 de 6,20 s, consistente con saturación de conexiones o del cliente.
+
+La hipótesis de que el techo lo imponen la transferencia y la cola es la principal, pero no está aislada. Para aislarla hace falta medir el parsing sin subida (por ejemplo, llamando a `extract_pdf_text` en bucle dentro del contenedor) y repetir k6 con el cliente fuera del host.
 
 ### 6.2 El caché es lo que más mueve Vegeta
 
@@ -110,7 +130,7 @@ Los 429 de E2 (195) son rechazos rápidos. Cada uno libera al cliente sin gastar
 - **Licencia.** pymupdf es AGPL. Si el proyecto se distribuye, hay que cumplirla.
 - **Caché por réplica.** No se comparte entre réplicas. El resultado de E2 depende de que la prueba repita PDFs: con PDFs únicos, el caché no ayuda.
 - **Admisión y uploads chunked.** El tope `PDF_MAX_FILE_SIZE_MB` se aplica por `Content-Length` antes de encolar. Un upload chunked sin `Content-Length` se lee completo antes de validar el tamaño.
-- **k6 no cumple la referencia.** Ver sección 5. No se publica un k6 del código final porque no existe en el repo.
+- **k6 por debajo de la referencia.** Ver sección 5. El k6 del código final existe, pero su throughput y su cola (p90, p95) están lejos de la referencia, y los 31 fallos no tienen causa identificada.
 - **Discrepancia en B.** `B_pymupdf_2_20.txt` (resumen) reporta 3,33% de éxito; `B_pymupdf_2_20_vegeta.txt` reporta 2,80%. Se usa el archivo de Vegeta. No pudimos determinar qué corrida corresponde al resumen.
 - **Ruido en el host.** Las mediciones de Docker Desktop comparten CPU con otros contenedores. Hace falta una medición aislada para afirmar un valor de CPU por réplica.
 - **Entorno.** Las filas de Windows se ejecutaron desde el host y las de Docker dentro de la red interna por HTTP directo. No son directamente comparables.
