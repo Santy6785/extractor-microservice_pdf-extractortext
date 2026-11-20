@@ -13,6 +13,7 @@ from fastapi import APIRouter, Request, HTTPException
 from app.core.errors import rfc9457_error
 from app.core.config import Settings
 from app.dtos.extraction import ExtractResponse
+from app.infrastructure.pdf_reader import InfraExtractionError
 from app.services.extraction import extract_pdf_text
 
 settings = Settings()
@@ -78,6 +79,9 @@ async def extract_endpoint(request: Request) -> ExtractResponse:
         return await asyncio.to_thread(extract_pdf_text, pdf_bytes)
     except HTTPException:
         raise
+    except InfraExtractionError as exc:
+        detail = "PDF is password-protected" if exc.kind == "encrypted" else "PDF is corrupt or unreadable"
+        raise HTTPException(status_code=422, detail=rfc9457_error(422, "Unprocessable Entity", detail))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=rfc9457_error(400, "Extraction Failed", str(exc)))
     finally:

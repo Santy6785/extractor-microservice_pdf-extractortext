@@ -11,11 +11,15 @@ import pymupdf
 
 
 class InfraExtractionError(Exception):
-    """Raised when PDF text extraction fails at the infrastructure layer."""
+    """Raised when PDF text extraction fails at the infrastructure layer.
 
-    def __init__(self, message: str) -> None:
+    ``kind`` tells the API layer why: "corrupt" (default) or "encrypted".
+    """
+
+    def __init__(self, message: str, kind: str = "corrupt") -> None:
         super().__init__(message)
         self.message = message
+        self.kind = kind
 
 
 def extract_text(pdf_bytes: bytes) -> tuple[str, int]:
@@ -28,22 +32,29 @@ def extract_text(pdf_bytes: bytes) -> tuple[str, int]:
         A tuple (raw_text, page_count) where raw_text is the concatenated plain text of all pages.
 
     Raises:
-        InfraExtractionError: If the PDF cannot be read or parsed.
+        InfraExtractionError: kind="corrupt" if the PDF cannot be parsed,
+            kind="encrypted" if it requires a password.
     """
     if not pdf_bytes:
         raise InfraExtractionError("PDF bytes are empty")
     try:
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
-        try:
-            page_count = len(doc)
-            text_parts: list[str] = []
-            for page in doc:
-                txt = page.get_text()
-                if txt:
-                    text_parts.append(txt.strip())
-            raw_text = "\n".join(text_parts) if text_parts else ""
-            return raw_text, page_count
-        finally:
-            doc.close()
     except Exception as exc:
         raise InfraExtractionError(f"Failed to extract PDF text: {exc}") from exc
+    try:
+        if doc.needs_pass:
+            raise InfraExtractionError("PDF is password-protected", kind="encrypted")
+        page_count = len(doc)
+        text_parts: list[str] = []
+        for page in doc:
+            txt = page.get_text()
+            if txt:
+                text_parts.append(txt.strip())
+        raw_text = "\n".join(text_parts) if text_parts else ""
+        return raw_text, page_count
+    except InfraExtractionError:
+        raise
+    except Exception as exc:
+        raise InfraExtractionError(f"Failed to extract PDF text: {exc}") from exc
+    finally:
+        doc.close()
