@@ -1,0 +1,61 @@
+# Despliegue autocontenido: sin red externa ni Traefik previo.
+# Uso: docker compose -f docker-compose.standalone.yml up -d --build
+# Expone el servicio en http://localhost/extract (puerto 80 del host).
+# Si el Traefik del stack externo ya usa el puerto 80, detenelo antes.
+name: pdf-extractor-standalone
+
+services:
+  reverse-proxy:
+    image: traefik:v3.6
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=pdf-extractor-standalone
+      - --entrypoints.web.address=:80
+      - --api.dashboard=false
+      - --log.level=INFO
+    ports:
+      - "80:80"
+    volumes:
+      # Solo lectura. Montar el socket da acceso amplio al host: uso local de evaluación.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - standalone
+
+  api:
+    build: .
+    image: pdf-extraction-service
+    restart: unless-stopped
+    environment:
+      - EXTRACT_CONCURRENCY=${EXTRACT_CONCURRENCY:-3}
+      - EXTRACT_QUEUE_TIMEOUT=${EXTRACT_QUEUE_TIMEOUT:-10}
+      - EXTRACT_MAX_QUEUE=${EXTRACT_MAX_QUEUE:-8}
+      - EXTRACT_CACHE_SIZE=${EXTRACT_CACHE_SIZE:-32}
+      - PDF_MAX_FILE_SIZE_MB=50
+    deploy:
+      replicas: 5
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: '1G'
+    expose:
+      - "80"
+    networks:
+      - standalone
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=pdf-extractor-standalone
+      - traefik.http.routers.extractor-standalone.rule=PathPrefix(`/extract`) || PathPrefix(`/api/v1/extract`)
+      - traefik.http.routers.extractor-standalone.entrypoints=web
+      - traefik.http.services.extractor-standalone.loadbalancer.server.port=80
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0) if urllib.request.urlopen('http://127.0.0.1:80/health').getcode()==200 else 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+networks:
+  standalone:
+    name: pdf-extractor-standalone
