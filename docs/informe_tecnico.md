@@ -1,4 +1,4 @@
-# Informe técnico: extractor PDF → Markdown
+﻿# Informe técnico: extractor PDF → Markdown
 
 **Materia:** Desarrollo de Software (UTN FRSR), TP de test de carga y stress.
 **Fecha:** 2026-11-20.
@@ -113,10 +113,9 @@ Los 429 de E2 (195) son rechazos rápidos. Cada uno libera al cliente sin gastar
 - **k6 no cumple la referencia.** Ver sección 5. No se publica un k6 del código final porque no existe en el repo.
 - **Discrepancia en B.** `B_pymupdf_2_20.txt` (resumen) reporta 3,33% de éxito; `B_pymupdf_2_20_vegeta.txt` reporta 2,80%. Se usa el archivo de Vegeta. No pudimos determinar qué corrida corresponde al resumen.
 - **Ruido en el host.** Las mediciones de Docker Desktop comparten CPU con otros contenedores. Hace falta una medición aislada para afirmar un valor de CPU por réplica.
-- **Entorno.** Las filas de Windows pasaron por Traefik con TLS. Las de Docker, por HTTP directo. No son directamente comparables.
+- **Entorno.** Las filas de Windows se ejecutaron desde el host y las de Docker dentro de la red interna por HTTP directo. No son directamente comparables.
 - **Health falso.** `/health` devuelve `{"status": "ok"}` fijo.
 - **Desvíos de RFC 9457.** `type` repite el path y el `Content-Type` es `application/json` (ver `docs/contratos/extract.md`).
-- **Modo standalone sin verificar en este repo.** `docker-compose.standalone.yml` pasó validación de YAML, no una corrida con Docker.
 
 ## 8. Evidencia negativa
 
