@@ -1,4 +1,4 @@
-﻿# Informe técnico: extractor PDF → Markdown
+# Informe técnico: extractor PDF → Markdown
 
 **Materia:** Desarrollo de Software (UTN FRSR), TP de test de carga y stress.
 **Fecha:** 2026-11-20.
