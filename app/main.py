@@ -5,13 +5,20 @@ from fastapi.exceptions import HTTPException
 from starlette.responses import JSONResponse
 
 from app.api.v1.endpoints import router as v1_router
+from app.core.config import Settings
 from app.core.errors import rfc9457_error
+from app.core.observability import RequestIdMiddleware, setup_logging
+
+setup_logging(Settings().LOG_LEVEL)
 
 app = FastAPI(
     title="PDF Text Extraction Service",
     description="Microservice that extracts text from PDF documents via raw PDF bytes or multipart upload",
     version="1.0.0",
 )
+
+
+app.add_middleware(RequestIdMiddleware)
 
 
 @app.exception_handler(HTTPException)

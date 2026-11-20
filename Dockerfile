@@ -21,4 +21,4 @@ COPY app/ ./app
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Run the service using uv's runtime (no‑sync because deps are already installed)
-CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]
+CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80", "--no-access-log"]
