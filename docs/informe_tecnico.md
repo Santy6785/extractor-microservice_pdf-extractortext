@@ -119,7 +119,7 @@ Pasar de E1 (16,80%) a E2 (86,87%) con el mismo semáforo y la misma cola cambia
 
 ### 6.3 Por qué la admisión temprana importa
 
-Los 429 de E2 (195) son rechazos rápidos. Cada uno libera al cliente sin gastar ancho de banda útil. Esto dejó de ser cierto con el Cambio A (ADR-004): al leer el body antes del semáforo, Vegeta pasó de 429 a timeouts (1025 timeouts en E4 cola). Se descartó el cambio.
+Los 429 de E2 (195) son rechazos rápidos. Cada uno rechaza la petición antes de leer o parsear el PDF, evitando saturar CPU y memoria en el servidor. Esto dejó de ser cierto con el Cambio A (ADR-004): al leer el body antes del semáforo, Vegeta pasó de 429 a timeouts (1025 timeouts en E4 cola). Se descartó el cambio.
 
 ### 6.4 Medición de CPU con carga de fondo
 

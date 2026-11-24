@@ -13,3 +13,6 @@ scratch/
 tests/stress/*.bin
 scratch/
 .coverage
+
+.venv/
+.env
