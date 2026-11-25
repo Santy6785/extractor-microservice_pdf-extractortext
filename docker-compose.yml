@@ -1,5 +1,5 @@
 services:
-  api:
+  extractor:
     build: .
     image: pdf-extraction-service
     restart: unless-stopped
@@ -17,11 +17,13 @@ services:
           memory: '1G'
     expose:
       - "80"
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
     networks:
-      - proxy
+      - pdf-extractortext_pdf-network
     labels:
       - traefik.enable=true
-      - traefik.docker.network=proxy
+      - traefik.docker.network=pdf-extractortext_pdf-network
       - traefik.http.routers.extractor.rule=Host(`extractor.universidad.localhost`) && PathPrefix(`/extract`)
       - traefik.http.routers.extractor.entrypoints=https
       - traefik.http.routers.extractor.tls=true
@@ -34,6 +36,5 @@ services:
       start_period: 5s
 
 networks:
-  proxy:
+  pdf-extractortext_pdf-network:
     external: true
-    name: proxy

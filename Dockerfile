@@ -20,5 +20,9 @@ COPY app/ ./app
 # Ensure the venv is on the PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
+# Señal de parada ordenada: SIGTERM permite al manejador de señales drenar
+# extracciones activas antes de terminar el proceso.
+STOPSIGNAL SIGTERM
+
 # Run the service using uv's runtime (no‑sync because deps are already installed)
 CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80", "--no-access-log"]

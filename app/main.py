@@ -1,5 +1,11 @@
 """FastAPI application entry point for the PDF text extraction microservice."""
 
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
+import asyncio
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException
 from starlette.responses import JSONResponse
@@ -8,13 +14,28 @@ from app.api.v1.endpoints import router as v1_router
 from app.core.config import Settings
 from app.core.errors import rfc9457_error
 from app.core.observability import RequestIdMiddleware, setup_logging
+from app.core.signals import register_signal_handlers
 
 setup_logging(Settings().LOG_LEVEL)
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Registra manejadores de señal al arrancar y cede el control al shutdown."""
+    loop = asyncio.get_event_loop()
+    register_signal_handlers(loop, grace_period_seconds=30.0)
+    logger.info("Signal handlers registered for graceful shutdown")
+    yield
+    logger.info("Extractor lifespan shutdown complete")
+
 
 app = FastAPI(
     title="PDF Text Extraction Service",
     description="Microservice that extracts text from PDF documents via raw PDF bytes or multipart upload",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -26,7 +47,7 @@ async def rfc9457_http_exception_handler(request: Request, exc: HTTPException):
     """Convert HTTPException to RFC 9457 Problem Details format.
 
     Ensures error fields (type, title, status, detail) appear at the top level
-    of the response body, not nested under a \"detail\" key.
+    of the response body, not nested under a "detail" key.
     """
     error_detail = rfc9457_error(
         status_code=exc.status_code,

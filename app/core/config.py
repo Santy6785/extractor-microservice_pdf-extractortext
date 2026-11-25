@@ -17,8 +17,9 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # New extraction concurrency settings (used by the /extract endpoint)
-    extract_concurrency: int = 2
-    extract_queue_timeout: float = 20.0
+    # Valores por defecto alineados con docker-compose.yml para dev/prod parity.
+    extract_concurrency: int = 3
+    extract_queue_timeout: float = 10.0
     extract_max_queue: int = 8
     extract_cache_size: int = 32
 

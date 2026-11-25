@@ -6,12 +6,20 @@ This version follows the updated specification:
 - Bounded waiting queue uses settings.extract_max_queue.
 - Handles three content types: multipart/form-data with a `file` field, `application/pdf`, and `application/octet-stream`.
 - Returns RFC 9457 compliant errors.
+- Graceful shutdown: rejects new extractions when shutting down, tracks active extractions.
 """
 
 import asyncio
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, status
+from fastapi.responses import JSONResponse
 from app.core.errors import rfc9457_error
 from app.core.config import Settings
+from app.core.signals import (
+    is_shutting_down,
+    increment_active_extractions,
+    decrement_active_extractions,
+    get_active_extractions,
+)
 from app.dtos.extraction import ExtractResponse
 from app.infrastructure.pdf_reader import InfraExtractionError
 from app.services.extraction import extract_pdf_text
@@ -22,6 +30,7 @@ router = APIRouter(tags=["pdf-extraction"])  # No prefix
 
 _semaphore = asyncio.Semaphore(settings.extract_concurrency)
 _esperando: int = 0
+
 
 async def _read_pdf(request: Request) -> bytes:
     ct = request.headers.get("content-type", "").lower()
@@ -45,9 +54,22 @@ async def _read_pdf(request: Request) -> bytes:
         ),
     )
 
+
 @router.post("/extract", response_model=ExtractResponse)
 async def extract_endpoint(request: Request) -> ExtractResponse:
     global _esperando
+
+    # Rechazar nuevas extracciones si el servicio está apagando
+    if is_shutting_down():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=rfc9457_error(
+                503,
+                "Service Unavailable",
+                "Extractor is shutting down, new extractions are not accepted",
+            ),
+        )
+
     max_bytes = settings.PDF_MAX_FILE_SIZE_MB * 1024 * 1024
     # Early rejection: refuse by declared Content-Length before queueing or reading the body.
     declared = request.headers.get("content-length", "")
@@ -77,6 +99,8 @@ async def extract_endpoint(request: Request) -> ExtractResponse:
         finally:
             _esperando -= 1
 
+    # Marcar extracción activa
+    increment_active_extractions()
     try:
         pdf_bytes = await _read_pdf(request)
         # Chunked uploads have no Content-Length: enforce the limit on the actual body too.
@@ -100,3 +124,4 @@ async def extract_endpoint(request: Request) -> ExtractResponse:
         raise HTTPException(status_code=400, detail=rfc9457_error(400, "Extraction Failed", str(exc)))
     finally:
         _semaphore.release()
+        decrement_active_extractions()
